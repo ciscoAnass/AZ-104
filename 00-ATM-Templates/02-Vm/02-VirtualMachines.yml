@@ -1,0 +1,35 @@
+trigger:
+  branches:
+    include:
+    - main
+pool:
+  name: Default
+variables:
+- name: azureServiceConnection
+  value: 'your-azure-service-connection-name'
+- name: subscriptionId
+  value: 'ID'
+- name: resourceGroupName
+  value: 'YOUR_RESOURCE_GROUP_NAME'
+- name: location
+  value: 'westeurope'
+- name: templateFile
+  value: '02-VirtualMachines.json'
+stages:
+- stage: __default
+  jobs:
+  - job: Deploy
+    displayName: 'Deploy ARM Template to Azure'
+    steps:
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: 'Deploy ARM Template to Resource Group'
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(azureServiceConnection)
+        subscriptionId: $(subscriptionId)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: $(resourceGroupName)
+        location: $(location)
+        templateLocation: 'Linked artifact'
+        csmFile: '$(System.DefaultWorkingDirectory)/$(templateFile)'
+        deploymentMode: 'Incremental'
