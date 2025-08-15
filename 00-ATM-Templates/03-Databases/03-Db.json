@@ -1,0 +1,61 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "variables": {
+        "location": "[resourceGroup().location]",
+        "sqlServerName": "[concat('sqlserver-', uniqueString(resourceGroup().id))]",
+        "sqlDatabaseName": "MySampleDatabase",
+        "sqlAdminLogin": "sqladmin",
+        "sqlAdminPassword": "REPLACE_WITH_A_STRONG_PASSWORD",
+        "databaseSku": {
+            "name": "S0",
+            "tier": "Standard",
+            "capacity": 10
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Sql/servers",
+            "apiVersion": "2022-08-01-preview",
+            "name": "[variables('sqlServerName')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "administratorLogin": "[variables('sqlAdminLogin')]",
+                "administratorLoginPassword": "[variables('sqlAdminPassword')]"
+            }
+        },
+        {
+            "type": "Microsoft.Sql/servers/databases",
+            "apiVersion": "2022-08-01-preview",
+            "name": "[concat(variables('sqlServerName'), '/', variables('sqlDatabaseName'))]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
+            ],
+            "sku": "[variables('databaseSku')]",
+            "properties": {
+                "collation": "SQL_Latin1_General_CP1_CI_AS",
+                "sampleName": "AdventureWorksLT"
+            }
+        },
+        {
+            "type": "Microsoft.Sql/servers/firewallRules",
+            "apiVersion": "2022-08-01-preview",
+            "name": "[concat(variables('sqlServerName'), '/AllowAllWindowsAzureIps')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
+            ],
+            "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+            }
+        }
+    ],
+    "outputs": {
+        "sqlServerFqdn": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Sql/servers', variables('sqlServerName'))).fullyQualifiedDomainName]"
+        }
+    }
+}
