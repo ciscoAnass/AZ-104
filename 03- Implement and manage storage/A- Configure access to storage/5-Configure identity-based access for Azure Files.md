@@ -1,0 +1,206 @@
+# Configure Identity-Based Access for Azure Files
+
+## A. Why identity-based access for Azure Files?
+
+Azure Files provides SMB file shares in the cloud. Historically, access was often granted using:
+
+- **Storage account keys** or  
+- **SAS tokens**
+
+These approaches work, but they have drawbacks:
+
+- No per-user accountability.  
+- Hard to follow least privilege.  
+- Keys can leak and are hard to rotate.
+
+To address this, Azure Files supports **identity-based authentication** and authorization using **Microsoft Entra ID** and **Windows ACLs**. citeturn0search9turn0search14turn0search30
+
+This lets you:
+
+- Use **user identities or groups** for SMB access.  
+- Apply **RBAC roles** at the share level. citeturn0search4turn0search23turn0search27  
+- Use **NTFS ACLs** at directory/file level, same as on-prem file servers. citeturn0search19turn0search9
+
+For AZ-104, you must understand **the big picture and main building blocks**, not every single configuration detail.
+
+---
+
+## B. Overview of Azure Files identity-based options
+
+There are three main identity-based options for Azure Files over SMB: citeturn0search9turn0search14turn0search30
+
+1. **Hybrid AD DS (on-prem Active Directory)**  
+   - Your on-prem AD DS is synced to Microsoft Entra ID.  
+   - Azure Storage account is joined to the domain (using a “storage account computer object”).  
+   - Clients authenticate using **Kerberos** or NTLM as usual.
+
+2. **Azure AD DS (managed domain)**  
+   - Similar to hybrid, but using Azure AD Domain Services instead of on-prem domain controllers.
+
+3. **Microsoft Entra-only Kerberos (cloud-only)**  
+   - Newer option: Azure Files supports **Entra ID Kerberos** without a traditional domain controller. citeturn0search14turn0search30  
+   - Useful for cloud-native environments or AVD (Azure Virtual Desktop).
+
+All three enable **identity-based SMB access** where users access `\\storageaccount.file.core.windows.net\share` with their domain/Entra credentials instead of a storage key.
+
+> **Exam tip:** If you see SMB + Windows clients + need to use user/group identities, think **Azure Files identity-based authentication with Entra/AD**.
+
+---
+
+## C. Two layers of authorization
+
+When using identity-based access, there are **two authorization layers**: citeturn0search4turn0search19turn0search23turn0search27
+
+1. **Share-level permissions (Azure RBAC)**  
+   - Managed on the Storage account / File share in Azure.  
+   - Uses built-in roles like **Storage File Data SMB Share Reader/Contributor/Elevated Contributor**, etc.
+
+2. **File/Directory-level permissions (NTFS ACLs)**  
+   - Enforced by the Azure Files service, same as NTFS on Windows file servers.  
+   - You can set ACLs using Windows tools (File Explorer, `icacls`) or Azure Files capabilities.
+
+A user must pass **both layers**:
+
+```text
+User access decision:
+ 1. Do they have a RBAC role that grants share-level access?
+ 2. Do they have appropriate NTFS ACL on the directory/file?
+
+ Only if both are allowed is access granted.
+```
+
+### Common share-level roles for SMB
+
+Some important built-in Entra RBAC roles: citeturn0search4turn0search19turn0search23turn0search27
+
+- **Storage File Data SMB Share Reader**
+  - Read-only access to files and directories.
+
+- **Storage File Data SMB Share Contributor**
+  - Read + write + delete files and directories.
+
+- **Storage File Data SMB Share Elevated Contributor**
+  - Read, write, delete, and **modify ACLs**; similar to “Change” permissions on Windows file servers.
+
+- **Storage File Data Privileged Contributor / Privileged Reader**
+  - Override existing ACLs; used for administrative scenarios.
+
+> **Exam tip:** For normal user access, you typically use **Reader** or **Contributor**. For access where users must modify ACLs, you use **Elevated Contributor**.
+
+---
+
+## D. High-level configuration steps (Entra-only example)
+
+Exact setup steps evolve over time, but the **high-level flow** for Entra-only Kerberos looks like this: citeturn0search14turn0search30turn0search9
+
+1. **Prerequisites**
+   - Devices (e.g., Windows clients or AVD session hosts) are Entra-joined or hybrid-joined and can get Kerberos tickets from Entra.  
+   - Correct OS versions and updates are installed.
+
+2. **Enable identity-based access on the Storage account**
+   - In the Storage account → **File shares → Identity-based access** (or similar blade).  
+   - Enable **Microsoft Entra Kerberos** for Azure Files. citeturn0search30
+
+3. **Assign RBAC roles at share level**
+   - Go to **File share → Access control (IAM)**.  
+   - Assign, for example:
+     - `Storage File Data SMB Share Contributor` to a user/group to allow read/write. citeturn0search4turn0search23turn0search27  
+     - `Storage File Data SMB Share Reader` for read-only access.
+
+4. **Configure NTFS ACLs**
+   - From a Windows client that has share-level rights, mount the share:
+     - `\\storageaccount.file.core.windows.net\share`  
+   - Use File Explorer or tools like `icacls` to adjust directory/file ACLs (e.g., grant the group read/write on a certain folder). citeturn0search19turn0search9
+
+5. **Access the share from clients**
+   - Users sign into Windows using their Entra identity.  
+   - They access the share via UNC path. Kerberos authentication occurs using Entra-issued tickets.
+
+---
+
+## E. Hybrid AD DS / Azure AD DS scenario – conceptual
+
+For **hybrid** or **Azure AD DS** cases, the flow is similar but includes domain-join steps: citeturn0search9turn0search14
+
+1. Your on-prem or Azure AD DS domain is set up and synchronized with Microsoft Entra ID.
+2. You configure Azure Files to **join the domain**:
+   - This creates a **computer object** in AD representing the Storage account.  
+   - Kerberos authentication can now work using that object.
+3. Assign share-level permissions via Azure RBAC (same as before). citeturn0search4turn0search23turn0search27  
+4. Configure NTFS ACLs using a domain-joined management VM. citeturn0search19turn0search9  
+5. Domain-joined clients access the share with their domain credentials.
+
+> **Exam angle:**  
+> - If the requirement mentions **existing on-prem AD**, think **hybrid AD DS**.  
+> - If it mentions **Azure AD Domain Services**, think **Azure AD DS** integration.
+
+---
+
+## F. Identity-based access vs key-based / SAS access
+
+| Aspect | Key-based (account key / SAS) | Identity-based (Entra / AD) |
+|--------|-------------------------------|-----------------------------|
+| Who is authorized? | Anyone with the key/SAS | Specific users and groups |
+| Auditing | Hard to trace per user | Per-user access in logs |
+| Least privilege | Hard (all-or-nothing) | Easy (groups, RBAC, ACLs) |
+| Revocation | Rotate key / expire SAS | Remove user from group / change role |
+| SMB integration | Works, but not user-specific | Native user-based SMB auth |
+| Recommended for | Short-term integration, simple apps | Enterprise file shares, AVD, Windows users |
+
+> **Exam tip:** If the question emphasizes **corporate users**, **Windows ACLs**, or **single sign-on (SSO)** for file shares, the answer is almost never “use account keys”; it’s **identity-based access**.
+
+---
+
+## G. Typical exam scenarios
+
+### Scenario 1 – Replace account-key access with Entra-based access
+
+> “Users currently access Azure file shares using storage account keys. The security team requires user-based permissions and logging of which user accessed which file.”
+
+Solution outline:
+
+- Configure **identity-based access** for Azure Files (e.g., Entra Kerberos or AD DS integration). citeturn0search9turn0search14turn0search30  
+- Assign appropriate **RBAC share-level roles** (e.g., Storage File Data SMB Share Reader/Contributor). citeturn0search4turn0search23turn0search27  
+- Configure **NTFS ACLs** for granular directory/file access. citeturn0search19turn0search9  
+- Stop distributing account keys to users.
+
+### Scenario 2 – Read-only access for all authenticated users
+
+> “All authenticated users should have read-only access to a file share, but only admins may change permissions.”
+
+Possible design: citeturn0search23turn0search27turn0search4
+
+- At share level:
+  - Assign `Storage File Data SMB Share Reader` to `All authenticated users` (or a broad group).  
+  - Assign `Storage File Data SMB Share Elevated Contributor` or Privileged Contributor to an admin group.
+- At NTFS level: further restrict which folders they can actually read.
+
+### Scenario 3 – User cannot access share despite being in group
+
+> “A user is in a group that has Storage File Data SMB Share Contributor on a share, but receives Access Denied when accessing a folder.”
+
+Possible causes:
+
+- NTFS ACL on that folder does **not** grant them read/write. citeturn0search19turn0search9  
+- Remember: user needs **share-level RBAC** **and** appropriate **NTFS ACL**.
+
+### Scenario 4 – AVD environment needs user-based access to profiles
+
+> “Azure Virtual Desktop environment needs to store user profiles and FSLogix data on Azure Files using Entra-only identities.”
+
+- Configure **Microsoft Entra Kerberos** for Azure Files. citeturn0search14turn0search30  
+- Assign appropriate share-level RBAC roles to AVD users/groups.  
+- Apply NTFS ACLs to profile folders as needed.
+
+---
+
+## H. Key exam points to remember
+
+- Azure Files supports **identity-based authentication** over SMB using **Entra ID / AD DS** with Kerberos. citeturn0search9turn0search14turn0search30  
+- Authorization is a combination of:
+  - **Share-level RBAC roles** (`Storage File Data SMB Share Reader/Contributor/Elevated Contributor`, etc.). citeturn0search4turn0search23turn0search27  
+  - **NTFS ACLs** on files and directories. citeturn0search19turn0search9  
+- Identity-based access provides better **auditing**, **least privilege**, and **enterprise integration** than account keys or SAS. citeturn0search9turn0search21turn0search30  
+- For AVD and modern cloud-only environments, **Entra-only Kerberos** is increasingly the recommended mode. citeturn0search14turn0search30
+
+If you understand how share-level RBAC and NTFS ACLs combine, and when to choose identity-based access instead of keys/SAS, you’ll be ready for most AZ-104 questions on Azure Files access control.
