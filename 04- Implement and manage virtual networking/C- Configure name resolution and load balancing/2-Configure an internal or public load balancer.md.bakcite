@@ -2,7 +2,7 @@
 
 ## A. Azure Load Balancer overview
 
-**Azure Load Balancer** is a **Layer 4 (TCP/UDP)** load balancer. It distributes traffic based on IP address and port, not on HTTP path or cookies.
+**Azure Load Balancer** is a **Layer 4 (TCP/UDP)** load balancer. It distributes traffic based on IP address and port, not on HTTP path or cookies. citeturn0search1turn0search4turn2search16
 
 It is used to:
 
@@ -11,7 +11,7 @@ It is used to:
 - Provide **outbound internet connectivity** (SNAT) for private workloads (Standard SKU).
 - Load‑balance both **public** and **internal** traffic.
 
-There are three SKUs: **Basic**, **Standard**, and **Gateway**. Basic is being retired (Sep 30, 2025) and should not be used for new deployments. Standard is the main SKU for AZ‑104.
+There are three SKUs: **Basic**, **Standard**, and **Gateway**. Basic is being retired (Sep 30, 2025) and should not be used for new deployments. Standard is the main SKU for AZ‑104. citeturn2search0turn2search4turn2search8turn2search26
 
 ### Public vs Internal Load Balancer
 
@@ -45,7 +45,7 @@ VNet
 
 ## B. Core components of Azure Load Balancer
 
-Azure Load Balancer is configured from a few key building blocks.
+Azure Load Balancer is configured from a few key building blocks. citeturn0search20turn0search7turn0search18turn2search11
 
 ### 1. Frontend IP configuration
 
@@ -53,7 +53,7 @@ Azure Load Balancer is configured from a few key building blocks.
 - Can be:
   - **Public IP** → creates a **public load balancer**.
   - **Private IP** in a subnet → creates an **internal load balancer**.
-- A single load balancer can have **multiple frontends** (multi‑VIP).
+- A single load balancer can have **multiple frontends** (multi‑VIP). citeturn0search18turn0search20
 
 ### 2. Backend pool
 
@@ -61,13 +61,13 @@ Azure Load Balancer is configured from a few key building blocks.
 - Backend members can be:
   - Virtual machine NICs.
   - VM scale set instances.
-  - IP addresses (Standard SKU).
+  - IP addresses (Standard SKU). citeturn2search0turn2search16
 
 The load balancer distributes flows among healthy backend instances.
 
 ### 3. Health probes
 
-- **Probes** regularly check if backend instances are healthy.
+- **Probes** regularly check if backend instances are healthy. citeturn2search11turn2search7
 - Types:
   - **TCP probe** – checks whether a TCP port is open.
   - **HTTP / HTTPS probe** – sends an HTTP GET to a path (e.g. `/health`) and expects a 200 response.
@@ -75,7 +75,7 @@ The load balancer distributes flows among healthy backend instances.
   - Protocol, port, path (for HTTP/S).
   - Interval and number of failed attempts before marking instance **unhealthy**.
 
-For Standard Load Balancer to probe correctly you must allow probe traffic (source IP `168.63.129.16` or service tag **AzureLoadBalancer**) through NSGs and local firewalls.
+For Standard Load Balancer to probe correctly you must allow probe traffic (source IP `168.63.129.16` or service tag **AzureLoadBalancer**) through NSGs and local firewalls. citeturn2search7turn2search11
 
 ### 4. Load‑balancing rules
 
@@ -85,9 +85,9 @@ For Standard Load Balancer to probe correctly you must allow probe traffic (sour
   - Backend port (e.g. 80 or different).
   - Protocol (TCP or UDP).
   - Session persistence (None / Client IP / Client IP and protocol).
-  - Idle timeout, TCP reset on idle (Standard SKU).
+  - Idle timeout, TCP reset on idle (Standard SKU). citeturn0search1turn2search0turn2search11
 
-**HA Ports** (Standard internal LB only): one special rule that load‑balances **all ports** for a given frontend IP — used for scenarios like NVA appliances and firewalls.
+**HA Ports** (Standard internal LB only): one special rule that load‑balances **all ports** for a given frontend IP — used for scenarios like NVA appliances and firewalls. citeturn2search20turn2search26
 
 ### 5. Inbound NAT rules
 
@@ -99,13 +99,13 @@ For Standard Load Balancer to probe correctly you must allow probe traffic (sour
 
 - Control **SNAT** (Source Network Address Translation) for outbound internet traffic from backend instances.
 - Define which frontend IP(s) and ports are used for outbound flows.
-- Help avoid **SNAT port exhaustion** by scaling out IPs or using Azure NAT Gateway.
+- Help avoid **SNAT port exhaustion** by scaling out IPs or using Azure NAT Gateway. citeturn0search5turn2search0turn2search2
 
 ---
 
 ## C. Standard vs Basic Load Balancer (exam‑level view)
 
-While Basic is being retired, exam questions may still reference it. Key differences:
+While Basic is being retired, exam questions may still reference it. Key differences: citeturn2search0turn2search4turn2search8turn2search26
 
 | Feature | Standard | Basic |
 |--------|----------|-------|
@@ -166,7 +166,7 @@ Scenario: You want a public load balancer distributing HTTP traffic to two web V
 5. Path: `/` or better a dedicated `/health` endpoint if your app has one.
 6. Interval & unhealthy threshold: leave defaults, or fine‑tune.
 
-Ensure NSGs and local firewalls allow the probe source (`AzureLoadBalancer` tag / 168.63.129.16).
+Ensure NSGs and local firewalls allow the probe source (`AzureLoadBalancer` tag / 168.63.129.16). citeturn2search7turn2search11
 
 ### 6. Create a load‑balancing rule
 
@@ -216,7 +216,7 @@ Scenario: An internal line‑of‑business app should be accessed only from insi
 5. Subnet: `AppSubnet` (for the frontend IP).
 6. Frontend IP:
    - Give a name, e.g. `fe-app`.
-   - Choose **Dynamic** or **Static** private IP (static recommended).
+   - Choose **Dynamic** or **Static** private IP (static recommended). citeturn0search14turn0search20
 
 ### 3. Backend pool
 
@@ -261,7 +261,7 @@ Scenario: An internal line‑of‑business app should be accessed only from insi
 
 ### 1. NSGs and security
 
-- Standard LBs are **secure by default** – they do not allow inbound traffic unless explicitly allowed by NSGs.
+- Standard LBs are **secure by default** – they do not allow inbound traffic unless explicitly allowed by NSGs. citeturn2search4turn2search0
 - Typical NSG rules:
   - Allow HTTP/HTTPS/RDP/SSH from source (Internet, corporate IP, etc.) to LB frontend subnet or VM subnet.
   - Use the `AzureLoadBalancer` service tag to allow health probe traffic.
@@ -275,11 +275,11 @@ Scenario: An internal line‑of‑business app should be accessed only from insi
 ### 3. Outbound connectivity and SNAT
 
 - Standard Load Balancer can provide outbound connectivity but SNAT ports are finite.
-- For heavy outbound workloads, prefer **Azure NAT Gateway** attached to the subnet to reduce SNAT port exhaustion risk.
+- For heavy outbound workloads, prefer **Azure NAT Gateway** attached to the subnet to reduce SNAT port exhaustion risk. citeturn0search5turn2search0
 
 ### 4. Multiple frontends and port reuse
 
-- You can use **multiple frontend IPs** on one load balancer (multi‑VIP).
+- You can use **multiple frontend IPs** on one load balancer (multi‑VIP). citeturn0search18turn0search20
 - This allows you to:
   - Host multiple public IPs for different applications.
   - Use the same backend pool with different ports or IPs.

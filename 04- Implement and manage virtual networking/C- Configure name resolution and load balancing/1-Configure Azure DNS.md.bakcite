@@ -33,7 +33,7 @@ You are expected in AZ‑104 to **understand DNS concepts** and know which recor
 
 ## B. What is Azure DNS?
 
-**Azure DNS** is a Microsoft service that hosts your DNS zones and records on Azure’s global name server infrastructure.
+**Azure DNS** is a Microsoft service that hosts your DNS zones and records on Azure’s global name server infrastructure. citeturn0search0turn0search9
 
 Important characteristics:
 
@@ -51,9 +51,9 @@ Two main flavours:
 
 1. **Azure Public DNS**
    - Internet‑facing zones like `contoso.com`.
-   - Used to publish public IPs of Azure services (App Service, public load balancers, etc.).
+   - Used to publish public IPs of Azure services (App Service, public load balancers, etc.). citeturn1search12
 2. **Azure Private DNS**
-   - Internal zones like `contoso.local` or `privatelink.blob.core.windows.net`.
+   - Internal zones like `contoso.local` or `privatelink.blob.core.windows.net`. citeturn0search6turn1search3turn0search28
    - Used for name resolution inside virtual networks (VNets) and for Private Endpoints.
 
 **Exam mindset:**
@@ -75,7 +75,7 @@ Use Azure public DNS when you want to:
   - Public IP of Web/App servers
   - Public Load Balancer
   - Application Gateway
-  - Azure Front Door, Traffic Manager, CDN via **alias records** etc.
+  - Azure Front Door, Traffic Manager, CDN via **alias records** etc. citeturn1search0turn1search12
 - Manage DNS with Azure RBAC and automation (ARM, Bicep, CLI).
 
 ### 2. End‑to‑end steps: move `contoso.com` to Azure DNS
@@ -94,14 +94,14 @@ Azure automatically creates:
 
 - An **SOA record** for the zone.
 - An **NS record set** with 4 Azure DNS name servers, for example:  
-  `ns1-03.azure-dns.com`, `ns2-03.azure-dns.net`, `ns3-03.azure-dns.org`, `ns4-03.azure-dns.info`.
+  `ns1-03.azure-dns.com`, `ns2-03.azure-dns.net`, `ns3-03.azure-dns.org`, `ns4-03.azure-dns.info`. citeturn0search0turn0search22
 
 **Step 3 – Delegate the domain at the registrar**
 
 1. Sign in to the registrar portal (e.g. GoDaddy).
 2. Find the domain `contoso.com` → **Nameserver** settings.
 3. Replace the registrar’s default name servers with the **Azure DNS NS records** from your zone.
-4. Save changes and wait for DNS propagation (can take minutes to hours because of TTLs).
+4. Save changes and wait for DNS propagation (can take minutes to hours because of TTLs). citeturn0search22turn0search31
 
 From now on, **Azure DNS** is authoritative for `contoso.com`.
 
@@ -134,7 +134,7 @@ Example `www` A record set:
 - `www.contoso.com` – A – `20.51.10.15`
 - `www.contoso.com` – A – `20.51.10.16`
 
-This record set has **two A records**; DNS resolvers can pick either IP (simple round‑robin distribution).
+This record set has **two A records**; DNS resolvers can pick either IP (simple round‑robin distribution). citeturn1search1turn1search9
 
 Properties of a record set:
 
@@ -145,13 +145,13 @@ Properties of a record set:
 
 ### 4. Azure DNS alias records (important for exam)
 
-An **alias record** is a special Azure DNS record set that points to an Azure resource instead of a fixed IP or name.
+An **alias record** is a special Azure DNS record set that points to an Azure resource instead of a fixed IP or name. citeturn1search0turn1search7
 
 Supported alias record types:
 
 - A
 - AAAA
-- CNAME
+- CNAME citeturn1search0turn1search7
 
 Alias targets can include:
 
@@ -164,7 +164,7 @@ Alias targets can include:
 Why alias records are useful:
 
 - Automatically update DNS if the target public IP or endpoint changes or is deleted.
-- Allow using a Traffic Manager, Front Door or public IP at the **zone apex** (`contoso.com`) where a normal CNAME is forbidden by DNS standards.
+- Allow using a Traffic Manager, Front Door or public IP at the **zone apex** (`contoso.com`) where a normal CNAME is forbidden by DNS standards. citeturn1search0turn1search12turn1search13
 
 **Example – apex alias to Traffic Manager**
 
@@ -180,7 +180,7 @@ Now, `contoso.com` directly maps (via alias) to Traffic Manager.
 
 ### 1. Azure‑provided DNS (default behaviour)
 
-By default, every VNet uses **Azure‑provided DNS** at IP `168.63.129.16`.
+By default, every VNet uses **Azure‑provided DNS** at IP `168.63.129.16`. citeturn2search7turn0search6
 
 Characteristics:
 
@@ -191,7 +191,7 @@ Characteristics:
 
 ### 2. Azure Private DNS zones
 
-**Azure Private DNS** lets you create DNS zones that are only visible inside selected VNets.
+**Azure Private DNS** lets you create DNS zones that are only visible inside selected VNets. citeturn0search6turn0search28turn1search3
 
 Examples:
 
@@ -204,8 +204,8 @@ Key properties:
 
 - **Not reachable from the internet.**
 - Only VMs and resources in **linked VNets** can resolve these names.
-- Supports common record types: A, AAAA, CNAME, MX, PTR, SOA, SRV, TXT.
-- Integrated with **Private Endpoints** (PaaS private link).
+- Supports common record types: A, AAAA, CNAME, MX, PTR, SOA, SRV, TXT. citeturn1search3
+- Integrated with **Private Endpoints** (PaaS private link). citeturn0search3turn0search28
 
 ### 3. VNet links and auto‑registration
 
@@ -213,7 +213,7 @@ To use a Private DNS zone, you must **link it** to one or more VNets.
 
 When you create a **virtual network link**, you can choose:
 
-- **Enable auto‑registration** – Azure automatically creates and updates A records for VMs in that VNet (hostname → private IP).
+- **Enable auto‑registration** – Azure automatically creates and updates A records for VMs in that VNet (hostname → private IP). citeturn0search6turn0search28
 - **Disable auto‑registration** – you manage records manually.
 
 **Example:**
@@ -266,7 +266,7 @@ You should see it resolve to `10.10.2.10`.
 
 ### 5. Private DNS zones with Private Endpoints (PaaS)
 
-Many Azure services support **Private Endpoints** (e.g., Storage, SQL, Key Vault). When you create a private endpoint, Azure recommends or automatically creates private DNS zones like:
+Many Azure services support **Private Endpoints** (e.g., Storage, SQL, Key Vault). When you create a private endpoint, Azure recommends or automatically creates private DNS zones like: citeturn0search3turn0search28
 
 - `privatelink.blob.core.windows.net`
 - `privatelink.file.core.windows.net`
@@ -283,7 +283,7 @@ This gives **private, internal** access to PaaS services.
 
 ### 6. Azure DNS Private Resolver (summary only)
 
-**Azure DNS Private Resolver** is a managed DNS forwarder in Azure. It allows:
+**Azure DNS Private Resolver** is a managed DNS forwarder in Azure. It allows: citeturn0search3turn0search6
 
 - On‑prem DNS servers to resolve Azure Private DNS zones.
 - Azure resources to resolve names from on‑prem DNS via DNS forwarding rules.
@@ -390,7 +390,7 @@ You only need to **recognize CLI/PowerShell commands at a high level** for AZ‑
 
 You can configure **diagnostic settings** on Azure DNS zones to send:
 
-- **Query logs** – DNS queries served from the zone (public and private).
+- **Query logs** – DNS queries served from the zone (public and private). citeturn0search0turn1search5
 - **Audit logs** – zone/record changes (also visible in Activity Log).
 
 Use **Log Analytics** to answer questions like:

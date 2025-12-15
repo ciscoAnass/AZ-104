@@ -5,10 +5,10 @@
 To troubleshoot Azure Load Balancer, you must first understand its behaviour:
 
 - It is **Layer 4** (TCP/UDP). It does not look inside HTTP headers or URLs.
-- It uses a **hash‑based algorithm** (source IP, destination IP, source port, destination port, protocol) to select a backend instance – distribution is **per flow**, not per packet.
+- It uses a **hash‑based algorithm** (source IP, destination IP, source port, destination port, protocol) to select a backend instance – distribution is **per flow**, not per packet. citeturn0search1turn0search4turn2search16
 - It only sends traffic to backend instances that are **healthy** according to the **health probes**.
-- For Standard SKUs, inbound traffic is **blocked by default** unless allowed by NSGs.
-- For outbound traffic, it performs **SNAT** using the frontend IP (or a NAT Gateway).
+- For Standard SKUs, inbound traffic is **blocked by default** unless allowed by NSGs. citeturn2search4turn2search0
+- For outbound traffic, it performs **SNAT** using the frontend IP (or a NAT Gateway). citeturn0search5turn2search2
 
 Typical troubleshooting questions:
 
@@ -33,7 +33,7 @@ Before diving into tools, confirm the **minimum configuration** is correct:
    - Uses the correct frontend and backend ports.
 5. For **Standard** LBs:
    - NSGs allow inbound flows on the frontend/VM subnet.
-   - NSGs allow **AzureLoadBalancer** (health probes).
+   - NSGs allow **AzureLoadBalancer** (health probes). citeturn2search7turn2search11
 
 A large percentage of issues are due to one of these being misconfigured.
 
@@ -71,7 +71,7 @@ A large percentage of issues are due to one of these being misconfigured.
 
 1. **Check backend health in the portal**
 
-   - Open the load balancer → **Insights** / **Backend health** / **Metrics**.
+   - Open the load balancer → **Insights** / **Backend health** / **Metrics**. citeturn0search2turn0search8turn2search2turn2search18
    - If health probe status is **0%** or instances show as **Unhealthy**, investigate the probe (see Problem 2).
 
 2. **Test connectivity directly to a backend VM**
@@ -87,17 +87,17 @@ A large percentage of issues are due to one of these being misconfigured.
 
    - Network Watcher → **Connection troubleshoot**.
    - Source: test VM; Destination: load balancer frontend IP:port.
-   - The tool shows if traffic is **allowed or blocked** and at which hop.
+   - The tool shows if traffic is **allowed or blocked** and at which hop. citeturn2search9turn2search5turn2search27
 
 4. **Verify NSG rules with IP flow verify**
 
    - Network Watcher → **IP flow verify**.
    - Select target VM, direction, protocol, port, remote IP.
-   - Result shows which NSG rule allows or denies traffic.
+   - Result shows which NSG rule allows or denies traffic. citeturn2search1turn2search13turn2search17
 
 5. **Check routing**
 
-   - Use Network Watcher **Next hop** tool to ensure packets from client to backend use the expected route, not a forced tunnel to an NVA or on‑prem.
+   - Use Network Watcher **Next hop** tool to ensure packets from client to backend use the expected route, not a forced tunnel to an NVA or on‑prem. citeturn2search5turn2search27
 
 **Exam question pattern:**
 
@@ -122,7 +122,7 @@ Correct answer often includes **allowing port 80 in NSG on the subnet/NIC**, not
    - Probe path (for HTTP) is invalid or returns non‑200 status.
 
 2. **NSG or firewall blocking probe traffic**
-   - NSG denies traffic from **AzureLoadBalancer** service tag or from IP `168.63.129.16`.
+   - NSG denies traffic from **AzureLoadBalancer** service tag or from IP `168.63.129.16`. citeturn2search7turn2search11
    - Local firewall on VM blocks the probe port.
 
 3. **Application is not listening on the probe port**
@@ -160,7 +160,7 @@ Correct answer often includes **allowing port 80 in NSG on the subnet/NIC**, not
 
 4. **Review health probe logs and metrics**
 
-   - Use **Load Balancer Insights** and **Health Probe Status** metrics.
+   - Use **Load Balancer Insights** and **Health Probe Status** metrics. citeturn2search2turn2search11turn2search18turn2search10
    - See if probe success percentage drops over time.
 
 **Exam pattern:**
@@ -206,7 +206,7 @@ Because of this:
 
 1. **Check Load Balancer Insights – Flow distribution**
 
-   - Use **Load Balancer Insights** to see per‑backend connection and traffic distribution.
+   - Use **Load Balancer Insights** to see per‑backend connection and traffic distribution. citeturn0search8turn2search18turn0search2
 
 2. **Test from multiple clients**
 
@@ -289,13 +289,13 @@ Because of this:
 
 ### Root cause – SNAT port exhaustion
 
-Standard Load Balancer uses a finite number of **SNAT ports** per backend and frontend IP. When many connections are open simultaneously, these ports can be consumed and new connections are dropped.
+Standard Load Balancer uses a finite number of **SNAT ports** per backend and frontend IP. When many connections are open simultaneously, these ports can be consumed and new connections are dropped. citeturn0search5turn2search2
 
 ### Fixes and best practices
 
 1. **Use Azure NAT Gateway** for heavy outbound scenarios
 
-   - NAT Gateway offers much larger SNAT port capacity and is recommended for large‑scale outbound connections.
+   - NAT Gateway offers much larger SNAT port capacity and is recommended for large‑scale outbound connections. citeturn0search5turn2search0turn2search12
 
 2. **Scale out public IPs for outbound**
 
@@ -309,7 +309,7 @@ Standard Load Balancer uses a finite number of **SNAT ports** per backend and fr
 
 4. **Monitor SNAT metrics**
 
-   - Use metrics like **Used SNAT Ports** and **Failed outbound connections** in Azure Monitor / Load Balancer Insights.
+   - Use metrics like **Used SNAT Ports** and **Failed outbound connections** in Azure Monitor / Load Balancer Insights. citeturn0search5turn2search10turn2search22
 
 ---
 
@@ -317,7 +317,7 @@ Standard Load Balancer uses a finite number of **SNAT ports** per backend and fr
 
 ### 1. Load Balancer Insights and metrics
 
-- **Data Path Availability** – indicates availability of the data path from frontend to backend.
+- **Data Path Availability** – indicates availability of the data path from frontend to backend. citeturn2search2turn2search6turn2search10turn2search14turn2search18
 - **Health Probe Status** – probe success rate per backend pool.
 - **Frontend and Backend Availability** dashboards show per‑frontend/port and per‑backend perspective.
 
@@ -325,7 +325,7 @@ If **Data Path Availability** drops or **Health Probe Status** is low, the probl
 
 ### 2. Azure Network Watcher
 
-Key features (all exam‑relevant):
+Key features (all exam‑relevant): citeturn2search5turn2search1turn2search9turn2search27turn2search13
 
 - **IP flow verify** – checks if traffic is allowed or denied by NSGs and shows the rule.
 - **Connection troubleshoot** – end‑to‑end path test between two endpoints; shows where traffic is blocked.
@@ -337,7 +337,7 @@ Key features (all exam‑relevant):
 ### 3. Activity log and health events
 
 - **Activity log** – audit of configuration changes (e.g. NSG changes that broke connectivity).
-- **Resource Health** and **Load Balancer health events** – indicate platform issues affecting the data path or frontends.
+- **Resource Health** and **Load Balancer health events** – indicate platform issues affecting the data path or frontends. citeturn0search2turn0search30turn2search6turn2search26
 
 ---
 
