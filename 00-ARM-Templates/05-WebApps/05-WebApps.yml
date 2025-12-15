@@ -1,0 +1,35 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  name: Default
+
+variables:
+  azureServiceConnection: 'YOUR_SC' # The name of your Azure DevOps service connection
+  subscriptionId: 'YOUR_SUB_ID' # Your Azure Subscription ID
+  resourceGroupName: 'your_rg' # The name of the resource group to deploy to
+  location: 'westeurope' # The location for the resource group
+  templateFile: '01-storage.json' # The path to your ARM template file in the repository
+
+# This pipeline has a single job that directly deploys the template.
+jobs:
+- job: Deploy
+  displayName: 'Deploy ARM Template to Azure'
+  steps:
+  - task: AzureResourceManagerTemplateDeployment@3
+    displayName: 'Deploy ARM Template to Resource Group'
+    inputs:
+      deploymentScope: 'Resource Group'
+      azureResourceManagerConnection: $(azureServiceConnection)
+      subscriptionId: $(subscriptionId)
+      action: 'Create Or Update Resource Group' # This will create the RG if it doesn't exist
+      resourceGroupName: $(resourceGroupName)
+      location: $(location)
+      templateLocation: 'Linked artifact'
+      csmFile: '$(System.DefaultWorkingDirectory)/$(templateFile)'
+      deploymentMode: 'Incremental' # Deploys resources without deleting existing ones

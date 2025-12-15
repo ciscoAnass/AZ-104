@@ -1,0 +1,213 @@
+# Configure Stored Access Policies
+
+## A. What is a stored access policy?
+
+A **stored access policy** is a **named, server-side object** that lives on a:
+
+- Blob container  
+- File share  
+- Queue  
+- Table
+
+It defines:
+
+- **Start time**  
+- **Expiry time**  
+- **Permissions** (read, write, delete, list, etc.)
+
+A SAS can then **reference** this policy by its **ID** instead of embedding permissions and times directly. citeturn0search2turn0search7
+
+Think of a stored access policy as a **template** for SAS tokens that you can manage centrally.
+
+---
+
+## B. Why stored access policies matter
+
+Without stored access policies:
+
+- Every SAS includes its own **permissions** and **expiry**.
+- Once you create a SAS and someone copies it, you **cannot change or revoke it** easily, unless you rotate the account key (which breaks many other things). citeturn0search1turn0search3
+
+With stored access policies:
+
+- Several SAS tokens can all reference the **same policy ID**.  
+- If you **delete or modify** the policy, all SAS tokens tied to it are affected immediately. citeturn0search2turn0search7
+
+Typical uses:
+
+- Partner access for weeks/months.  
+- Applications that need long-lived SAS but must still support central control.  
+- Compliance rules that require quickly revoking access when contracts end.
+
+> **Exam tip:** if the question is “How can we revoke previously issued SAS URLs without rotating account keys?”, the answer is **stored access policy**.
+
+---
+
+## C. Limits and constraints
+
+Key limitations you must remember: citeturn0search2turn0search7turn0search12
+
+- Maximum **5 stored access policies** per **container**, **file share**, **queue**, or **table**.
+- Policies are defined at the **resource level**, not the whole account.
+  - Example: each container has its own set of up to 5 policies.
+
+If you try to define more than 5 policies at once, the service returns an error. citeturn0search2turn0search7
+
+Design implication:
+
+- You must **plan policy usage** (e.g., one per partner, or one per access level).  
+- You cannot create hundreds of individual policies per container.
+
+---
+
+## D. Policy fields (conceptual model)
+
+Each policy (in REST terms, a `SignedIdentifier`) contains: citeturn0search2turn0search7
+
+- `Id` – a unique string within the container/share/queue/table (up to 64 chars).  
+- `Start` – when the policy becomes valid (optional).  
+- `Expiry` – when the policy expires (required for SAS).  
+- `Permission` – explicitly allowed operations, e.g.:
+  - Blob container: `r` (read), `w` (write), `d` (delete), `l` (list), `a` (add), `c` (create).  
+  - File share: `r`, `w`, `d`, `l`, etc.
+
+SAS tokens that reference the policy do **not** specify permissions or expiry; they inherit these values from the policy.
+
+---
+
+## E. Creating a stored access policy (conceptual steps)
+
+### For a Blob container (similar for File share / Queue / Table)
+
+1. Go to **Storage account → Containers → select container**.  
+2. Open **Access policy** (name may vary: “Access policy” / “Stored access policies”).  
+3. Add a new policy:
+   - Policy ID: e.g. `partnerA-readonly`.  
+   - Start and expiry time (e.g. today to 30 days from now).  
+   - Permissions (e.g. **Read**, **List**).  
+4. Save.
+
+Now you have a policy on that container.
+
+### Generate SAS that uses this policy
+
+In the same container:
+
+1. Choose **Generate SAS**.  
+2. Instead of manually setting **start**, **expiry**, **permissions**, select the **access policy ID** you created.  
+3. Generate SAS → the token includes a reference to the policy (`si=partnerA-readonly`).
+
+Any SAS created this way now **depends on the stored access policy**.
+
+> **Note:** Exact UI labels may change, but the underlying idea remains: **define policy**, then **create SAS referencing policy**. citeturn0search2turn0search7
+
+---
+
+## F. Using stored access policies via code/CLI (conceptual)
+
+In REST or SDKs, you manage stored access policies by:
+
+1. Calling operations like **Set Container ACL** or equivalent, passing a collection of `SignedIdentifier` elements (each one defines a policy). citeturn0search2  
+2. When generating SAS via SDKs, you either:
+   - Supply the policy ID, or  
+   - Directly specify permissions and times (no policy).
+
+In the exam, you rarely need exact API names, but you must recognize **what stored access policies do**.
+
+---
+
+## G. Updating and revoking access
+
+### 1. Revoking access by deleting a policy
+
+If you **delete** a stored access policy:
+
+- All SAS tokens that referenced this policy become **invalid** immediately. citeturn0search2turn0search7  
+- This is the recommended way to **revoke long-lived SAS** without rotating account keys.
+
+**Use case:** contract with Partner A ends.
+
+1. Delete policy `partnerA-readonly`.  
+2. All existing SAS URLs for Partner A that used this policy stop working.
+
+### 2. Tightening access by editing policy
+
+You can **edit**:
+
+- **Permissions** (e.g. remove Delete).  
+- **Expiry time** (e.g. bring expiry closer).
+
+All SAS tokens referencing the policy now use the **new permissions and expiry**.
+
+> **Exam tip:** “Change read access to read+list for all SAS tokens previously issued to Partner A” → modify permissions of the stored access policy rather than re-issuing SAS URLs.
+
+### 3. What if SAS was not tied to a policy?
+
+If a SAS token is created **without** referencing a stored access policy:
+
+- Its permissions and expiry are **baked into the token**.  
+- You cannot change or revoke it centrally.  
+- To invalidate it, you must **regenerate the account key** used to sign it, which might break many consumers. citeturn0search3turn0search1
+
+That’s why best practice for long-lived SAS is: **always use stored access policies**.
+
+---
+
+## H. Example designs
+
+### Design 1 – Partner-specific policies
+
+You have container `logs` accessed by three partners: A, B, C.
+
+- Create three policies on `logs`:
+  - `partnerA-r` (read-only, 90 days).  
+  - `partnerB-rw` (read-write, 60 days).  
+  - `partnerC-r` (read-only, 30 days).  
+- Generate SAS for each partner referencing their respective policy.
+
+This uses **3 of the 5 available policies** for that container.
+
+### Design 2 – Role-based policies
+
+You have an internal app with different roles:
+
+- `readonly` – read-only access for support teams.  
+- `writer` – read/write for the app.  
+- `admin` – broader permissions for operations.
+
+Create 3 policies on the container and issue SAS to each app/service according to its role. If you ever need to reduce access, change the policy permissions.
+
+### Design 3 – Time-boxed access windows
+
+You want a queue to be readable only during a migration window.
+
+- Create policy `migration-window` on the queue with `Start` = migration start time, `Expiry` = migration end time, `Permission` = `ra` (read/add).  
+- Any SAS referencing this policy will automatically work only during this window.
+
+---
+
+## I. Stored access policies vs SAS-only vs keys
+
+| Aspect | SAS without policy | SAS with stored access policy | Account keys |
+|--------|--------------------|-------------------------------|--------------|
+| Scope | Limited (resource/service) | Limited (resource/service) | Whole account (data plane) |
+| Time-bound | Yes | Yes (via policy) | No (until rotated) |
+| Central revocation | No (must rotate key) | Yes (edit/delete policy) | Not granular |
+| Management overhead | Simple | Slightly more setup | High risk |
+| Recommended for long-lived | No | **Yes** | No |
+
+> **Exam tip:**  
+> - **Short-lived, ad-hoc** access: SAS without policy is fine.  
+> - **Long-lived, partner/system** access: SAS **with stored access policy**.  
+> - Avoid using **account keys directly** whenever possible.
+
+---
+
+## J. Exam takeaways
+
+- Stored access policies live **on containers, file shares, queues, and tables**, not at the account level. citeturn0search2turn0search7  
+- Max **5 policies per resource** → be aware of the limit. citeturn0search2turn0search7turn0search12  
+- SAS referencing a stored access policy can be centrally **revoked** or **modified** by editing or deleting the policy. citeturn0search2turn0search7  
+- Without a stored access policy, the only way to revoke a SAS early is to **regenerate the account key**. citeturn0search3turn0search1  
+
+If you clearly understand where stored access policies live, how they are referenced, and how they enable revocation of SAS, you will handle most AZ-104 questions on this topic with ease.

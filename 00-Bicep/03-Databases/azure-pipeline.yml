@@ -1,0 +1,50 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+  branches:
+    include:
+    - main
+
+pool:
+  name: Default
+
+variables:
+- name: azureServiceConnection
+  value: 'SC-ANASS2'
+- name: subscriptionId
+  value: '07c82396-a78c-4bcf-919d-55119429b671'
+- name: resourceGroupName
+  value: 'RG-Anass'
+- name: location
+  value: 'westeurope'
+- name: templateFile
+  value: '04-DB.bicep'
+- name: adminPassword
+  value: 'g%!nD@369I8H'
+
+stages:
+- stage: __default
+  jobs:
+  - job: Deploy
+    displayName: 'Deploy Bicep to Azure'
+    steps:
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: 'Deploy Bicep to Resource Group'
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(azureServiceConnection)
+        subscriptionId: $(subscriptionId)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: $(resourceGroupName)
+        location: $(location)
+        templateLocation: 'Linked artifact'
+        csmFile: '$(System.DefaultWorkingDirectory)/$(templateFile)' # accepts .bicep
+        deploymentMode: 'Incremental'
+        overrideParameters: >
+          -adminPassword "$(adminPassword)"
+        # optional:
+        # deploymentName: 'bicep-$(Build.BuildId)'
+        # csmParametersFile: '$(System.DefaultWorkingDirectory)/parameters.json'

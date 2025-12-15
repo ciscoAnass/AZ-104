@@ -1,0 +1,402 @@
+# Troubleshoot load balancing
+
+## A. How Azure Load Balancer actually works
+
+To troubleshoot Azure Load Balancer, you must first understand its behaviour:
+
+- It is **Layer 4** (TCP/UDP). It does not look inside HTTP headers or URLs.
+- It uses a **hash‑based algorithm** (source IP, destination IP, source port, destination port, protocol) to select a backend instance – distribution is **per flow**, not per packet. citeturn0search1turn0search4turn2search16
+- It only sends traffic to backend instances that are **healthy** according to the **health probes**.
+- For Standard SKUs, inbound traffic is **blocked by default** unless allowed by NSGs. citeturn2search4turn2search0
+- For outbound traffic, it performs **SNAT** using the frontend IP (or a NAT Gateway). citeturn0search5turn2search2
+
+Typical troubleshooting questions:
+
+1. Why can’t I reach the **frontend IP**?
+2. Why is one or more **backend VMs** not getting traffic?
+3. Why does the traffic distribution look **uneven**?
+4. Why do outbound connections **fail or time out**?
+
+We’ll walk through common problems and a structured approach to fix them.
+
+---
+
+## B. Check the basics first
+
+Before diving into tools, confirm the **minimum configuration** is correct:
+
+1. **Frontend IP is configured** (public or internal) and is in the correct subnet.
+2. **Backend pool** contains the VMs / NICs you expect.
+3. **Health probe** points to the correct protocol and port/path.
+4. **Load‑balancing rule**:
+   - References the correct frontend, backend pool, and probe.
+   - Uses the correct frontend and backend ports.
+5. For **Standard** LBs:
+   - NSGs allow inbound flows on the frontend/VM subnet.
+   - NSGs allow **AzureLoadBalancer** (health probes). citeturn2search7turn2search11
+
+A large percentage of issues are due to one of these being misconfigured.
+
+---
+
+## C. Problem 1 – Cannot reach the frontend IP
+
+### Symptoms
+
+- Pinging or browsing to the public IP fails.
+- Internal clients cannot connect to the ILB IP.
+- Port tests from outside (e.g. `Test-NetConnection`) show no response.
+
+### Possible causes
+
+1. **NSG or firewall blocking traffic**
+   - NSG on the **subnet** or **NIC** denies the inbound port.
+   - A local firewall (Windows Firewall, iptables) denies the port.
+
+2. **Missing or wrong load‑balancing rule**
+   - The rule is for a different port or protocol.
+   - The rule references a different frontend or backend pool.
+
+3. **No healthy backend instances**
+   - If all backends are **unhealthy**, the load balancer has nowhere to send traffic.
+   - Some clients see timeouts or TCP resets.
+
+4. **Routing issues / UDRs**
+   - User‑defined routes send traffic from the subnet away from the load balancer or backends.
+
+5. **Public DNS points to the wrong IP**
+   - DNS and load balancer IPs do not match.
+
+### How to troubleshoot
+
+1. **Check backend health in the portal**
+
+   - Open the load balancer → **Insights** / **Backend health** / **Metrics**. citeturn0search2turn0search8turn2search2turn2search18
+   - If health probe status is **0%** or instances show as **Unhealthy**, investigate the probe (see Problem 2).
+
+2. **Test connectivity directly to a backend VM**
+
+   - From another VM in the VNet, try connecting directly to the backend VM IP/port.
+   - If that fails, the problem is **not the load balancer**; check:
+
+     - Application is listening on the correct port.
+     - OS firewall rules.
+     - NSG rules on subnet/NIC.
+
+3. **Use Network Watcher – Connection troubleshoot**
+
+   - Network Watcher → **Connection troubleshoot**.
+   - Source: test VM; Destination: load balancer frontend IP:port.
+   - The tool shows if traffic is **allowed or blocked** and at which hop. citeturn2search9turn2search5turn2search27
+
+4. **Verify NSG rules with IP flow verify**
+
+   - Network Watcher → **IP flow verify**.
+   - Select target VM, direction, protocol, port, remote IP.
+   - Result shows which NSG rule allows or denies traffic. citeturn2search1turn2search13turn2search17
+
+5. **Check routing**
+
+   - Use Network Watcher **Next hop** tool to ensure packets from client to backend use the expected route, not a forced tunnel to an NVA or on‑prem. citeturn2search5turn2search27
+
+**Exam question pattern:**
+
+> You deployed a Standard public load balancer and created a rule for port 80, but clients cannot connect from the internet.  
+
+Correct answer often includes **allowing port 80 in NSG on the subnet/NIC**, not just creating a LB rule.
+
+---
+
+## D. Problem 2 – Health probes show backend as Unhealthy
+
+### Symptoms
+
+- Backend VMs show **Unhealthy** in load balancer insights.
+- You can reach the backend manually, but not through the load balancer.
+- No traffic is sent to that VM.
+
+### Common causes
+
+1. **Probe using wrong port or protocol**
+   - Probe set to **HTTP 80** but your app listens on **HTTPS 443**.
+   - Probe path (for HTTP) is invalid or returns non‑200 status.
+
+2. **NSG or firewall blocking probe traffic**
+   - NSG denies traffic from **AzureLoadBalancer** service tag or from IP `168.63.129.16`. citeturn2search7turn2search11
+   - Local firewall on VM blocks the probe port.
+
+3. **Application is not listening on the probe port**
+   - Service is stopped or bound to a different IP or port.
+
+4. **Probe returns intermittent failures**
+   - Application is slow or overloaded; health check endpoint times out.
+
+### Troubleshooting steps
+
+1. **Check probe configuration**
+
+   - Verify probe protocol, port, and (HTTP) path.
+   - Confirm they match actual listening service on the VM.
+
+2. **Test the probe manually from inside the VNet**
+
+   For HTTP probe to `/health` on port 80:
+
+   ```powershell
+   # From another VM in the same VNet
+   Invoke-WebRequest http://10.0.2.4:80/health
+   ```
+
+   Expect status code 200 (or configured success code).
+
+3. **Check NSG / firewall**
+
+   - Ensure NSG allows inbound traffic on the **probe port** from `AzureLoadBalancer`.
+   - On Windows:
+
+     ```powershell
+     Get-NetFirewallRule | Where-Object {$_.DisplayName -like "*80*"}
+     ```
+
+4. **Review health probe logs and metrics**
+
+   - Use **Load Balancer Insights** and **Health Probe Status** metrics. citeturn2search2turn2search11turn2search18turn2search10
+   - See if probe success percentage drops over time.
+
+**Exam pattern:**
+
+> Probes use HTTP on port 80 but the app only listens on HTTPS 443 → fix by changing the probe to HTTPS 443 or enabling HTTP listener.
+
+---
+
+## E. Problem 3 – Some VMs receive traffic, others never do
+
+### Symptoms
+
+- Load is not balanced evenly.
+- One VM gets most or all traffic; others appear idle.
+
+### How the algorithm affects distribution
+
+Azure Load Balancer distributes **new connections** using a hash (5‑tuple):
+
+- Source IP / port
+- Destination IP / port
+- Protocol
+
+Because of this:
+
+- A **single client** will usually stick to a single backend instance (if session persistence mode is set accordingly).
+- If most traffic comes from one gateway or NAT device, many flows may hash to the same backend.
+
+### Possible causes
+
+1. **Single client or NAT gateway testing**
+   - When testing with one machine, you may always hit the same backend VM.
+
+2. **Session persistence settings**
+   - **Client IP** or **Client IP and protocol** can “pin” traffic from the same IP to the same VM.
+
+3. **Backend instances not truly healthy**
+   - Some VMs show healthy probes but application is too slow.
+
+4. **Backend VMs of different sizes or throttled**
+
+### Troubleshooting and fixes
+
+1. **Check Load Balancer Insights – Flow distribution**
+
+   - Use **Load Balancer Insights** to see per‑backend connection and traffic distribution. citeturn0search8turn2search18turn0search2
+
+2. **Test from multiple clients**
+
+   - Perform test connections from **different source IPs** (different VMs, physical clients).
+
+3. **Review session persistence**
+
+   - For more even distribution, set persistence to **None** or adjust as required.
+
+4. **Scale and health**
+
+   - Check whether some backends are slower or have resource bottlenecks (CPU, memory).
+
+**Exam pattern:**
+
+> When testing from a single client, you always land on the same VM → this is expected due to hash‑based distribution; test from multiple clients or change session persistence.
+
+---
+
+## F. Problem 4 – Backend VMs respond on probe but not on data port
+
+### Symptoms
+
+- Health probe shows VM as **Healthy**.
+- But real application traffic to that VM fails or times out.
+- Only some VMs in backend pool affected.
+
+### Common reasons
+
+1. **Application not listening on the data port**
+
+   - Probe port != application port.
+   - Health probe uses `TCP 8080` but the service listens on 8080 only for local connections, not all interfaces.
+
+2. **NSG or firewall blocking the data port but not the probe port**
+
+   - Probes might use one port, while data uses another blocked by NSG.
+
+3. **Asymmetric routing**
+
+   - UDR or NVA sends return traffic on a different path, breaking connection state.
+
+### Troubleshooting steps
+
+1. **Confirm listening ports on the VM**
+
+   ```powershell
+   # Windows
+   netstat -ano | findstr 8080
+   ```
+
+   ```bash
+   # Linux
+   sudo ss -tulpen | grep 8080
+   ```
+
+2. **Use Connection troubleshoot from client VM to backend VM**
+
+   - Ensure the path is allowed and symmetric.
+
+3. **Check NSGs for data port**
+
+   - Confirm rules allow data port from appropriate sources.
+
+4. **Check UDRs**
+
+   - Use Network Watcher **Effective routes** to see if return traffic goes via a firewall with missing rules.
+
+**Exam hint:** Remember that **probes and real traffic can use different ports**; a healthy probe does **not** guarantee that application ports are open or allowed.
+
+---
+
+## G. Problem 5 – Outbound connectivity and SNAT port exhaustion
+
+### Symptoms
+
+- Outbound connections to internet intermittently fail.
+- You see connection timeouts, especially during bursts of activity.
+- Logs mention SNAT failure or too many connections.
+
+### Root cause – SNAT port exhaustion
+
+Standard Load Balancer uses a finite number of **SNAT ports** per backend and frontend IP. When many connections are open simultaneously, these ports can be consumed and new connections are dropped. citeturn0search5turn2search2
+
+### Fixes and best practices
+
+1. **Use Azure NAT Gateway** for heavy outbound scenarios
+
+   - NAT Gateway offers much larger SNAT port capacity and is recommended for large‑scale outbound connections. citeturn0search5turn2search0turn2search12
+
+2. **Scale out public IPs for outbound**
+
+   - Add more outbound IPs (via outbound rules or NAT Gateway) to increase port pool.
+
+3. **Optimize application connection behaviour**
+
+   - Reuse connections (keep‑alive).
+   - Limit concurrency.
+   - Avoid short‑lived, very frequent connections if possible.
+
+4. **Monitor SNAT metrics**
+
+   - Use metrics like **Used SNAT Ports** and **Failed outbound connections** in Azure Monitor / Load Balancer Insights. citeturn0search5turn2search10turn2search22
+
+---
+
+## H. Tools for systematic troubleshooting
+
+### 1. Load Balancer Insights and metrics
+
+- **Data Path Availability** – indicates availability of the data path from frontend to backend. citeturn2search2turn2search6turn2search10turn2search14turn2search18
+- **Health Probe Status** – probe success rate per backend pool.
+- **Frontend and Backend Availability** dashboards show per‑frontend/port and per‑backend perspective.
+
+If **Data Path Availability** drops or **Health Probe Status** is low, the problem may be configuration or platform‑related.
+
+### 2. Azure Network Watcher
+
+Key features (all exam‑relevant): citeturn2search5turn2search1turn2search9turn2search27turn2search13
+
+- **IP flow verify** – checks if traffic is allowed or denied by NSGs and shows the rule.
+- **Connection troubleshoot** – end‑to‑end path test between two endpoints; shows where traffic is blocked.
+- **Next hop** – shows which hop a packet will take from a VM (useful for UDR/NVA issues).
+- **Effective security rules** – shows combined NSG rules applied to a NIC.
+- **Packet capture** – captures packets for deep analysis.
+- **VPN troubleshoot** – for VPN gateway issues (indirectly affects LB in hybrid setups).
+
+### 3. Activity log and health events
+
+- **Activity log** – audit of configuration changes (e.g. NSG changes that broke connectivity).
+- **Resource Health** and **Load Balancer health events** – indicate platform issues affecting the data path or frontends. citeturn0search2turn0search30turn2search6turn2search26
+
+---
+
+## I. Practical troubleshooting checklist (exam‑friendly)
+
+Use this mental checklist when you get a load balancer scenario question.
+
+### Step 1 – Is the frontend reachable?
+
+- Can you ping or `Test-NetConnection` to the frontend IP:port from an appropriate client?
+- If not:
+  - Check **NSGs**, **UDRs**, and **firewalls**.
+  - Check **DNS** records (if using names).
+
+### Step 2 – Are backend instances healthy?
+
+- Open load balancer → Backend health / metrics.
+- If unhealthy:
+  - Validate **probe** configuration (protocol, port, path).
+  - Confirm app is listening and OS firewall allows probe port.
+  - Ensure NSGs allow `AzureLoadBalancer` traffic.
+
+### Step 3 – Can you reach the backend directly?
+
+- From a VM in the same VNet, connect to backend VM IP:port.
+- If direct access fails → issue is **VM/app/NSG**, not the load balancer.
+
+### Step 4 – Check Network Watcher tools
+
+- **Connection troubleshoot** from client to frontend IP.
+- **IP flow verify** on backend NIC to confirm NSG rules.
+- **Next hop** to check routing anomalies.
+
+### Step 5 – Review metrics and health events
+
+- Look for drops in **Data Path Availability** or probe success.
+- Check **Resource Health** and health event logs.
+
+### Step 6 – Consider SNAT/outbound issues
+
+- For outbound failures, examine SNAT usage and consider adding **NAT Gateway**.
+
+---
+
+## J. Exam scenarios and typical correct answers
+
+1. **Scenario:** “You created a Standard public load balancer and added VMs to the backend pool. Clients cannot access the app on port 80 from the internet.”  
+   **Likely fix:** Create NSG rule to **allow inbound TCP 80** to the subnet/NIC, and ensure the LB rule and probe are configured correctly.
+
+2. **Scenario:** “Health probe reports all VMs as unhealthy. App listens on port 8080 over HTTP.”  
+   **Likely fix:** Configure probe to use **HTTP on port 8080** and ensure NSG allows probe traffic.
+
+3. **Scenario:** “Testing from one client always hits the same VM behind the load balancer. You expect round‑robin behaviour.”  
+   **Explanation:** Load Balancer distributes per connection hash; one client may always map to the same backend. Test from multiple clients or disable session persistence to see more even distribution.
+
+4. **Scenario:** “Outbound connections to the internet from backend VMs sometimes fail when many users are active.”  
+   **Likely fix:** SNAT port exhaustion – use **NAT Gateway** or additional outbound public IP addresses.
+
+5. **Scenario:** “Your internal app is published using an internal load balancer. On‑prem clients cannot connect, but VMs in Azure can.”  
+   **Likely fix:** Check **VPN/ExpressRoute routes**, firewalls, and ensure on‑prem DNS resolves ILB IP or private DNS name correctly.
+
+If you methodically follow these steps and remember which **tool** to use for which type of issue, you will be prepared to answer most AZ‑104 troubleshooting questions around Azure Load Balancer.

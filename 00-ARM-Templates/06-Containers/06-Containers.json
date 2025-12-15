@@ -1,0 +1,63 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "variables": {
+        "location": "[resourceGroup().location]",
+        "environmentName": "[concat('ca-env-', uniqueString(resourceGroup().id))]",
+        "containerAppName": "[concat('ca-nginx-', uniqueString(resourceGroup().id))]",
+        "containerImage": "nginx:latest"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.App/managedEnvironments",
+            "apiVersion": "2024-03-01",
+            "name": "[variables('environmentName')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Consumption"
+            },
+            "properties": {}
+        },
+        {
+            "type": "Microsoft.App/containerApps",
+            "apiVersion": "2024-03-01",
+            "name": "[variables('containerAppName')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]"
+            ],
+            "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
+                "configuration": {
+                    "ingress": {
+                        "external": true,
+                        "targetPort": 80,
+                        "transport": "http"
+                    }
+                },
+                "template": {
+                    "containers": [
+                        {
+                            "image": "[variables('containerImage')]",
+                            "name": "nginx-server",
+                            "resources": {
+                                "cpu": 0.25,
+                                "memory": "0.5Gi"
+                            }
+                        }
+                    ],
+                    "scale": {
+                        "minReplicas": 1,
+                        "maxReplicas": 1
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "containerAppUrl": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.App/containerApps', variables('containerAppName'))).latestRevisionFqdn]"
+        }
+    }
+}

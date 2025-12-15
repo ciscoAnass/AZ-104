@@ -1,0 +1,222 @@
+# Configure Blob Lifecycle Management
+
+## A. Purpose of Lifecycle Management
+
+Blob lifecycle management is a **rule-based engine** that automatically:
+
+- Moves blobs to **cheaper access tiers** (Hot → Cool → Cold → Archive).
+- Deletes blobs, snapshots, and versions after they’re no longer needed.
+
+You use it to:
+
+- **Control storage cost** over time.
+- Ensure **data retention policies** are met automatically.
+- Reduce manual clean-up scripts.
+
+Lifecycle management is available for **GPv2 and Blob storage accounts** (standard tier). citeturn0search7turn0search26turn0search31
+
+> Exam view: If you see requirements like “move blobs to the cool tier after 30 days and delete after 365 days” → think **lifecycle management rules**.
+
+---
+
+## B. Policy Structure (High-Level)
+
+A lifecycle management configuration is a **JSON policy** attached to the storage account. Components: citeturn0search7turn0search10turn0search26
+
+- **Policy**: contains an array of **rules**.
+- **Rule**:
+  - **Name** – unique string.
+  - **Enabled** (true/false).
+  - **Type** – usually `"Lifecycle"`.
+  - **Definition**:
+    - **Filters** – which blobs the rule applies to.
+    - **Actions** – what to do (tiering & deletion) and when.
+
+### 1. Filters
+
+Filters limit which blobs are affected:
+
+- **Blob types**:
+  - `blockBlob`, `appendBlob`, `pageBlob` (though page blobs support is limited).
+- **Prefix match**:
+  - Example: `["logs/"]` – only apply to blobs whose names start with `logs/`.
+- **Blob index tags**:
+  - Filter based on key/value tags (e.g. `env = prod`).
+
+### 2. Conditions
+
+Conditions are based on blob dates: citeturn0search7
+
+- `daysAfterModificationGreaterThan`
+- `daysAfterCreationGreaterThan`
+- `daysAfterLastAccessTimeGreaterThan` (requires **access time tracking**).
+
+These specify **when** an action should trigger. For example:
+
+- `daysAfterLastAccessTimeGreaterThan: 30` → after 30 days since last access.
+
+### 3. Actions
+
+Actions apply to blobs that match **filters + conditions**. Common actions: citeturn0search7turn0search13turn0search10
+
+- **Tiering actions**:
+  - `tierToCool`
+  - `tierToCold`
+  - `tierToArchive`
+  - `enableAutoTierToHotFromCool` (auto-promote to Hot when accessed, limited to once every 30 days). citeturn0search13
+- **Delete actions**:
+  - `delete` – delete base blobs.
+  - `deleteSnapshots` – delete snapshots.
+  - `deletePreviousVersions` – delete older versions.
+
+Important behavior: when deleting blobs with versions or snapshots, the policy must also handle **versions/snapshots**; it will **not delete the current version** until older versions and snapshots are deleted. citeturn0search10
+
+---
+
+## C. Creating a Lifecycle Rule (Portal Overview)
+
+1. Open the **storage account** in the portal.
+2. Under **Data management**, select **Lifecycle management**.
+3. Click **+ Add a rule**.
+4. Choose:
+   - **Rule scope** – all blobs or specific containers/prefixes.
+   - Whether to limit to **base blobs**, **snapshots**, **versions**, or combinations.
+5. Configure **conditions**:
+   - For example: “if **last modified** > 30 days” or “if **last access time** > 60 days”.
+6. Configure **actions**:
+   - Move to Cool/Cold/Archive.
+   - Delete base blobs / snapshots / versions.
+7. Save the rule.
+
+Notes: citeturn0search26turn0search7
+
+- Policy operations run **once per day**.
+- The entire policy must be **read/written as a whole** – no partial patch.
+- You can have multiple rules within one policy.
+
+> Exam: You don’t need the exact JSON syntax, but you must understand **what conditions/actions** the rules support and which account types support them.
+
+---
+
+## D. Example Lifecycle Rules (Exam-Relevant)
+
+### Example 1 – Hot → Cool → Archive → Delete
+
+Requirement:
+
+- After 30 days of inactivity, move blobs from Hot to Cool.
+- After 120 days of inactivity (90 days more), move to Archive.
+- After 365 days, delete blobs.
+
+Conceptual rule behavior: citeturn0search14turn0search31
+
+- Rule 1: If `daysAfterLastAccessTimeGreaterThan >= 30` → `tierToCool`.
+- Rule 2: If `daysAfterLastAccessTimeGreaterThan >= 120` → `tierToArchive`.
+- Rule 3: If `daysAfterLastAccessTimeGreaterThan >= 365` → `delete`.
+
+This is a classic **cost optimization** pattern for logs or telemetry.
+
+### Example 2 – Clean Up Old Versions
+
+Requirement:
+
+- Keep only 30 days of previous blob versions; delete older ones.
+
+Rule behavior:
+
+- Filter on **blob types = blockBlob**.
+- Action: `deletePreviousVersions` with condition `daysAfterModificationGreaterThan >= 30`.
+
+This is essential if **blob versioning** is enabled; otherwise, storage cost can grow quickly. citeturn2search1turn2search0
+
+### Example 3 – Delete Snapshots Only
+
+Requirement:
+
+- Base blobs must remain, but snapshots older than 7 days should be deleted.
+
+Rule behavior:
+
+- Apply to snapshots only.
+- Condition: `daysAfterCreationGreaterThan >= 7`.
+- Action: delete snapshots.
+
+---
+
+## E. Limitations and Considerations
+
+### 1. Account Types & Features
+
+- Lifecycle management applies to **general-purpose v2** and **Blob storage** accounts.
+- Some combinations may not be supported for **premium** or **Data Lake Gen2** scenarios; check docs if needed, but for AZ‑104, assume **GPv2 standard**. citeturn0search7turn0search26
+
+### 2. Evaluation Frequency
+
+- Rules run **once per day** – not in real-time.
+- Don’t rely on them for minute-level retention; think **days**.
+
+### 3. Interaction with Versioning & Soft Delete
+
+- Policy can delete **previous versions** and **snapshots**.
+- For blobs with versions/snapshots:
+  - **Current version** is not deleted until policy has deleted previous versions and snapshots when using delete action. citeturn0search10
+- Soft-deleted blobs remain until retention expires; lifecycle rules apply to **non-soft-deleted** data (soft delete is handled by the soft-delete retention, not lifecycle). citeturn1search2
+
+### 4. Cost Implications
+
+- Tiering to **Cool/Cold/Archive** reduces **storage cost**, but:
+  - Increases **access and rehydration costs**.
+  - Archive has **rehydration delay** (hours).
+- Tiering too aggressively may increase cost if you frequently access data in cooler tiers.
+
+> Exam tip: To show **cost optimization while keeping data online**, configure lifecycle rules to **tier blobs** instead of deleting them immediately.
+
+---
+
+## F. Exam-Style Scenarios
+
+### Scenario 1
+
+> Your company must keep application logs for 12 months. Logs are frequently accessed for the first month, occasionally for the next three months, and rarely after that. How do you configure lifecycle management to minimize cost?
+
+**Answer approach**:
+
+- Use a **lifecycle policy**:
+  - After 30 days of last access → move from **Hot** to **Cool/Cold**.
+  - After 120 days (4 months total) → move to **Archive**.
+  - After 365 days → delete the blobs.
+
+### Scenario 2
+
+> After enabling blob versioning, your storage bill increases significantly. You must automatically delete older versions but keep the current version and last 30 days of history. What should you use?
+
+**Answer**:
+
+- Configure **blob lifecycle management rule** to **delete previous versions** older than 30 days.
+
+### Scenario 3
+
+> A security policy requires that certain customer data must be deleted 7 years after creation. What’s the best way to enforce this in Blob Storage?
+
+**Answer**:
+
+- Use **lifecycle management** with `daysAfterCreationGreaterThan` = 2555 (approx 7 years) and a **delete** action targeting those blobs (filtered by prefix or blob index tags).
+
+### Scenario 4
+
+> You created a lifecycle rule to delete base blobs older than 365 days, but you notice that some blobs are not deleted as expected because they have snapshots or previous versions. What is happening?
+
+**Answer**:
+
+- Lifecycle policy **doesn’t delete the current version** until **previous versions and snapshots are deleted**. Update the policy to also delete snapshots and previous versions. citeturn0search10
+
+---
+
+## G. Quick Summary for the Exam
+
+- Lifecycle management = **rules** that tier or delete blobs based on **age or access time**.
+- Works for **GPv2/Blob** accounts; policies are **JSON** with rules, filters, conditions, and actions.
+- Common actions: `tierToCool`, `tierToCold`, `tierToArchive`, `delete`, `deletePreviousVersions`, `deleteSnapshots`.
+- Rules run **daily**, not in real-time.
+- Combine with **blob versioning** to control data growth.
+- Key exam patterns: **cost optimization, automated retention, automatic tiering**.
